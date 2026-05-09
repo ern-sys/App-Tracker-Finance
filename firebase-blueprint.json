@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "User Profile",
+      "description": "User preferences and settings",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "currency": { "type": "string", "default": "IDR" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "email", "currency"]
+    },
+    "Account": {
+      "title": "Financial Account",
+      "description": "An asset or debt account (e.g., Bank, Wallet, Loan)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["savings", "investment", "cash", "loan", "credit_card"] },
+        "balance": { "type": "number" },
+        "ownerId": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "balance", "ownerId"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Income, expense, or transfer",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense", "transfer"] },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "accountId": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["amount", "type", "date", "accountId", "ownerId"]
+    }
+  },
+  "firestore": {
+    "profiles/{userId}": {
+      "schema": "Profile",
+      "description": "Unique profile for each user"
+    },
+    "accounts/{accountId}": {
+      "schema": "Account",
+      "description": "Financial accounts owned by users"
+    },
+    "transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial transactions belonging to accounts"
+    }
+  }
+}

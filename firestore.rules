@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // Global Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Profiles
+    function isValidProfile(data) {
+      return data.keys().hasAll(['displayName', 'email', 'currency', 'createdAt']) &&
+             data.keys().size() == 4 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.currency is string && data.currency.size() <= 10 &&
+             data.createdAt is timestamp;
+    }
+
+    match /profiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProfile(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(userId) && isValidProfile(incoming()) &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'currency']);
+    }
+
+    // Accounts
+    function isValidAccount(data) {
+      return data.keys().hasAll(['name', 'type', 'balance', 'ownerId', 'lastUpdated']) &&
+             data.keys().size() == 5 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.type in ['savings', 'investment', 'cash', 'loan', 'credit_card'] &&
+             data.balance is number &&
+             data.ownerId == request.auth.uid &&
+             data.lastUpdated is timestamp;
+    }
+
+    match /accounts/{accountId} {
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidId(accountId);
+      allow create: if isSignedIn() && isValidAccount(incoming()) && incoming().lastUpdated == request.time;
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidAccount(incoming()) &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().lastUpdated == request.time;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Transactions
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['amount', 'type', 'category', 'date', 'accountId', 'ownerId', 'description']) &&
+             data.keys().size() == 7 &&
+             data.amount is number &&
+             data.type in ['income', 'expense', 'transfer'] &&
+             data.category is string && data.category.size() <= 100 &&
+             data.date is timestamp &&
+             data.accountId is string &&
+             data.ownerId == request.auth.uid &&
+             data.description is string && data.description.size() <= 500;
+    }
+
+    match /transactions/{transactionId} {
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidId(transactionId);
+      allow create: if isSignedIn() && isValidTransaction(incoming()) && 
+                    exists(/databases/$(database)/documents/accounts/$(incoming().accountId)) &&
+                    get(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid && isValidTransaction(incoming()) &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().accountId == existing().accountId;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
